@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}{{ device['device_name'] }} — ScreenTime{% endblock %}
+
+{% block extra_head %}
+<style>
+  .session-title { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb + heading -->
+<nav aria-label="breadcrumb" class="mb-1">
+  <ol class="breadcrumb small">
+    <li class="breadcrumb-item"><a href="/devices">Devices</a></li>
+    <li class="breadcrumb-item active">{{ device['device_name'] }}</li>
+  </ol>
+</nav>
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <h1 class="page-heading mb-0">
+    <i class="bi bi-laptop me-2" style="color:#6c63ff"></i>{{ device['device_name'] }}
+  </h1>
+  <!-- Date range picker -->
+  <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+    <label class="small text-muted mb-0">From</label>
+    <input type="date" name="from" value="{{ date_from }}" class="form-control form-control-sm" style="width:140px">
+    <label class="small text-muted mb-0">To</label>
+    <input type="date" name="to" value="{{ date_to }}" class="form-control form-control-sm" style="width:140px">
+    <button type="submit" class="btn btn-sm btn-primary" style="background:#6c63ff;border-color:#6c63ff">Apply</button>
+  </form>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-clock me-1"></i>Total Tracked</div>
+      <div class="stat-value">{{ total_seconds|duration }}</div>
+      <div class="text-muted" style="font-size:.78rem">{{ date_from }} → {{ date_to }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-collection me-1"></i>Sessions</div>
+      <div class="stat-value">{{ recent|length }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-app-indicator me-1"></i>Unique Apps</div>
+      <div class="stat-value">{{ top_apps|length }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-eye me-1"></i>Last Seen</div>
+      <div class="stat-value" style="font-size:1rem">{{ device['last_seen_at']|ago }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-bar-chart-horizontal-fill" style="color:#6c63ff"></i>
+        Top Apps
+      </div>
+      <div class="card-body" style="min-height:260px">
+        {% if top_apps %}
+          <canvas id="appsChart"></canvas>
+        {% else %}
+          <div class="text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No data</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-calendar3" style="color:#6c63ff"></i>
+        Daily Activity
+      </div>
+      <div class="card-body" style="min-height:260px">
+        {% if daily %}
+          <canvas id="dailyChart"></canvas>
+        {% else %}
+          <div class="text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No data</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- App breakdown table -->
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-list-task" style="color:#6c63ff"></i>
+    App Breakdown
+  </div>
+  <div class="card-body p-0">
+    {% if top_apps %}
+    {% set max_total = top_apps[0]['total'] %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">App</th>
+          <th>Time</th>
+          <th style="width:35%">Share</th>
+          <th>Sessions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in top_apps %}
+        <tr>
+          <td class="ps-3 fw-semibold">{{ a['app_name']|appname }}</td>
+          <td><span class="badge-app">{{ a['total']|duration }}</span></td>
+          <td>
+            <div class="progress" style="height:6px;border-radius:4px">
+              <div class="progress-bar" role="progressbar"
+                   style="width:{{ (a['total'] / max_total * 100)|round|int }}%;background:#6c63ff">
+              </div>
+            </div>
+          </td>
+          <td class="text-muted small">{{ a['session_count'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-4">No sessions in this date range.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Session log -->
+<div class="card">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-journal-text" style="color:#6c63ff"></i>
+    Session Log <span class="badge bg-secondary ms-1">{{ recent|length }}</span>
+  </div>
+  <div class="card-body p-0" style="max-height:480px;overflow-y:auto">
+    {% if recent %}
+    <table class="table table-hover table-sm mb-0">
+      <thead style="position:sticky;top:0;background:#fff;z-index:1">
+        <tr>
+          <th class="ps-3">Start (UTC)</th>
+          <th>App</th>
+          <th>Window Title</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in recent %}
+        <tr>
+          <td class="ps-3 text-muted small" style="white-space:nowrap">{{ s['start_time'][:19].replace('T',' ') }}</td>
+          <td><span class="badge-app">{{ s['app_name']|appname }}</span></td>
+          <td class="session-title text-muted small" title="{{ s['window_title'] }}">{{ s['window_title'] }}</td>
+          <td class="small">{{ s['duration_seconds']|duration }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-4">No sessions in this date range.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if top_apps %}
+<script>
+const appsCtx = document.getElementById('appsChart');
+new Chart(appsCtx, {
+  type: 'bar',
+  data: {
+    labels: {{ top_apps|map(attribute='app_name')|map('appname')|list|tojson }},
+    datasets: [{
+      data: {{ top_apps|map(attribute='total')|list|tojson }},
+      backgroundColor: 'rgba(108,99,255,.75)',
+      borderRadius: 5,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const s = ctx.raw;
+            const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+            return ` ${h > 0 ? h+'h ' : ''}${m}m`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { beginAtZero: true, title: { display: true, text: 'Seconds' }, grid: { color:'#f0f0f0' } },
+      y: { grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% if daily %}
+<script>
+const dailyCtx = document.getElementById('dailyChart');
+new Chart(dailyCtx, {
+  type: 'bar',
+  data: {
+    labels: {{ daily|map(attribute='day')|list|tojson }},
+    datasets: [{
+      label: 'Hours',
+      data: {{ daily|map(attribute='hours')|list|tojson }},
+      backgroundColor: 'rgba(34,197,94,.7)',
+      borderRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Hours' }, grid: { color:'#f0f0f0' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

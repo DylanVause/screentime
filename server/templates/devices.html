@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Devices — ScreenTime{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h1 class="page-heading mb-0"><i class="bi bi-laptop me-2" style="color:#6c63ff"></i>Devices</h1>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if devices %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Device Name</th>
+          <th>API Key</th>
+          <th>First Seen</th>
+          <th>Last Seen</th>
+          <th>Sessions</th>
+          <th>Total Tracked</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in devices %}
+        <tr>
+          <td class="ps-3">
+            <strong><i class="bi bi-laptop me-2 text-muted"></i>{{ d['device_name'] }}</strong>
+          </td>
+          <td><span class="badge-app">{{ d['key_name'] }}</span></td>
+          <td class="text-muted small">{{ d['created_at']|dt }}</td>
+          <td class="text-muted small">
+            {% if d['last_seen_at'] %}
+              {{ d['last_seen_at']|ago }}
+            {% else %}
+              <span class="text-muted">never</span>
+            {% endif %}
+          </td>
+          <td>{{ d['session_count']|default(0)|int }}</td>
+          <td>
+            {% if d['total_seconds'] %}
+              <span class="badge-app">{{ d['total_seconds']|duration }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end pe-3">
+            <a href="/devices/{{ d['id'] }}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-bar-chart-line me-1"></i>Analytics
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-laptop fs-2 d-block mb-2"></i>
+      No devices yet.<br>
+      <a href="/api-keys" class="mt-2 d-inline-block">Create an API key</a>, put it in the client config, and start the tracker.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

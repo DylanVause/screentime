@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — ScreenTime{% endblock %}
+
+{% block extra_head %}
+<style>
+  .app-row td:first-child { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-bar-brand { background: #6c63ff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h1 class="page-heading mb-0"><i class="bi bi-speedometer2 me-2" style="color:#6c63ff"></i>Dashboard</h1>
+  <span class="text-muted small"><i class="bi bi-calendar3 me-1"></i>{{ today }}</span>
+</div>
+
+<!-- Stat row -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-laptop me-1"></i>Devices</div>
+      <div class="stat-value">{{ devices|length }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-clock me-1"></i>Tracked Today</div>
+      <div class="stat-value">{{ total_today|duration }}</div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-trophy me-1"></i>Top App Today</div>
+      <div class="stat-value" style="font-size:1.2rem">
+        {% if top_apps_today %}
+          {{ top_apps_today[0]['app_name']|appname }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card p-3">
+      <div class="stat-label mb-1"><i class="bi bi-calendar-week me-1"></i>Last 7 Days</div>
+      <div class="stat-value">
+        {% if daily_totals %}
+          {{ (daily_totals|sum(attribute='hours') * 3600)|int|duration }}
+        {% else %}—{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts row -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-bar-chart-fill" style="color:#6c63ff"></i>
+        Daily Activity — Last 7 Days
+      </div>
+      <div class="card-body" style="min-height:240px">
+        {% if daily_totals %}
+          <canvas id="dailyChart"></canvas>
+        {% else %}
+          <div class="text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No data yet</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-pie-chart-fill" style="color:#6c63ff"></i>
+        Top Apps Today
+      </div>
+      <div class="card-body" style="min-height:240px">
+        {% if top_apps_today %}
+          <canvas id="appsChart"></canvas>
+        {% else %}
+          <div class="text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No data yet</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Devices table -->
+<div class="card">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-laptop" style="color:#6c63ff"></i>
+    Devices
+  </div>
+  <div class="card-body p-0">
+    {% if devices %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Device</th>
+          <th>API Key</th>
+          <th>Last Seen</th>
+          <th>Today</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in devices %}
+        <tr>
+          <td class="ps-3">
+            {% set diff_minutes = ((today ~ 'T23:59:59')|string) %}
+            <span class="{{ 'dot-online' if d['last_seen_at'] and d['last_seen_at'] > (today ~ 'T00:00:00') else 'dot-offline' }} me-2"></span>
+            <strong>{{ d['device_name'] }}</strong>
+          </td>
+          <td><span class="text-muted small">{{ d['key_name'] }}</span></td>
+          <td class="text-muted small">{{ d['last_seen_at']|ago }}</td>
+          <td>
+            {% if d['total_today'] %}
+              <span class="badge-app">{{ d['total_today']|duration }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-end pe-3">
+            <a href="/devices/{{ d['id'] }}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-bar-chart-line me-1"></i>Analytics
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-laptop fs-2 d-block mb-2"></i>
+      No devices yet. <a href="/api-keys">Create an API key</a> and configure a client.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if daily_totals %}
+<script>
+const dailyCtx = document.getElementById('dailyChart');
+new Chart(dailyCtx, {
+  type: 'bar',
+  data: {
+    labels: {{ daily_totals|map(attribute='day')|list|tojson }},
+    datasets: [{
+      label: 'Hours tracked',
+      data: {{ daily_totals|map(attribute='hours')|list|tojson }},
+      backgroundColor: 'rgba(108,99,255,.75)',
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, title: { display: true, text: 'Hours' }, grid: { color: '#f0f0f0' } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% if top_apps_today %}
+<script>
+const PALETTE = [
+  '#6c63ff','#22c55e','#f59e0b','#ef4444','#3b82f6',
+  '#ec4899','#14b8a6','#f97316','#8b5cf6','#06b6d4'
+];
+const appsCtx = document.getElementById('appsChart');
+const appLabels = {{ top_apps_today|map(attribute='app_name')|map('appname')|list|tojson }};
+const appData   = {{ top_apps_today|map(attribute='total')|list|tojson }};
+new Chart(appsCtx, {
+  type: 'doughnut',
+  data: {
+    labels: appLabels,
+    datasets: [{
+      data: appData,
+      backgroundColor: PALETTE.slice(0, appData.length),
+      borderWidth: 0,
+      hoverOffset: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    cutout: '62%',
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const s = ctx.raw;
+            const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+            return ` ${h > 0 ? h+'h ' : ''}${m}m`;
+          }
+        }
+      }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

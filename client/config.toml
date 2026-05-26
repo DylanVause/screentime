@@ -1,0 +1,30 @@
+[server]
+# Full URL of your ScreenTime server (no trailing slash).
+url = "https://your-server.example.com"
+
+# API key created in the admin interface.
+api_key = "st_REPLACE_WITH_YOUR_KEY"
+
+# Set to false only if using a self-signed certificate.
+verify_ssl = true
+
+# Seconds to wait for the server before giving up.
+timeout_seconds = 30
+
+[device]
+# Human-readable name shown in the admin dashboard.
+name = "My Windows PC"
+
+[tracking]
+# How often to check the active window (seconds).  1 is fine.
+poll_interval = 1
+
+# How often to upload buffered sessions to the server (seconds).
+upload_interval = 300   # 5 minutes
+
+# Sessions shorter than this are discarded (avoids noise from accidental clicks).
+min_session_seconds = 2
+
+[storage]
+# Local SQLite buffer.  Relative path = same folder as tracker.py.
+db_path = "sessions.db"

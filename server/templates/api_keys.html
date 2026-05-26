@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}API Keys — ScreenTime{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h1 class="page-heading mb-0"><i class="bi bi-key-fill me-2" style="color:#6c63ff"></i>API Keys</h1>
+  <button class="btn btn-primary btn-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#newKeyModal"
+          style="background:#6c63ff;border-color:#6c63ff">
+    <i class="bi bi-plus-lg me-1"></i>New Key
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    {% if keys %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Name</th>
+          <th>Key</th>
+          <th>Created</th>
+          <th>Last Used</th>
+          <th>Devices</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in keys %}
+        <tr class="{{ '' if k['is_active'] else 'table-secondary text-muted' }}">
+          <td class="ps-3 fw-semibold">{{ k['name'] }}</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <code class="key-display small" id="key-{{ k['id'] }}" style="color:#6c63ff">
+                {{ k['key'][:12] }}…{{ k['key'][-6:] }}
+              </code>
+              <button class="btn btn-outline-secondary btn-sm py-0 px-1"
+                      onclick="copyKey('{{ k['key'] }}', this)" title="Copy full key">
+                <i class="bi bi-clipboard"></i>
+              </button>
+            </div>
+          </td>
+          <td class="text-muted small">{{ k['created_at']|dt }}</td>
+          <td class="text-muted small">{{ k['last_used_at']|ago if k['last_used_at'] else '—' }}</td>
+          <td>{{ k['device_count'] }}</td>
+          <td>
+            {% if k['is_active'] %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Revoked</span>
+            {% endif %}
+          </td>
+          <td class="text-end pe-3">
+            <div class="d-flex gap-1 justify-content-end flex-wrap">
+              {% if k['is_active'] %}
+                <form method="post" action="/api-keys/{{ k['id'] }}/revoke"
+                      onsubmit="return confirm('Revoke this key? Clients using it will stop uploading.')">
+                  <button type="submit" class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-slash-circle me-1"></i>Revoke
+                  </button>
+                </form>
+              {% else %}
+                <form method="post" action="/api-keys/{{ k['id'] }}/activate">
+                  <button type="submit" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-check-circle me-1"></i>Re-activate
+                  </button>
+                </form>
+              {% endif %}
+              <form method="post" action="/api-keys/{{ k['id'] }}/delete"
+                    onsubmit="return confirm('Delete this key and ALL associated device data? This cannot be undone.')">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-trash me-1"></i>Delete
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-key fs-2 d-block mb-2"></i>
+      No API keys yet.<br>
+      <button class="btn btn-primary btn-sm mt-2" data-bs-toggle="modal" data-bs-target="#newKeyModal"
+              style="background:#6c63ff;border-color:#6c63ff">
+        <i class="bi bi-plus-lg me-1"></i>Create your first key
+      </button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header"><i class="bi bi-info-circle me-2"></i>How to use an API key</div>
+  <div class="card-body">
+    <ol class="mb-0 small">
+      <li>Copy the key value above.</li>
+      <li>On your Windows machine, open <code>client/config.toml</code>.</li>
+      <li>Set <code>api_key = "st_…"</code> and <code>url = "https://your-server"</code>.</li>
+      <li>Set a human-readable <code>[device] name</code>.</li>
+      <li>Run <code>python tracker.py</code> (or double-click <code>run.bat</code>).</li>
+      <li>To auto-start on Windows login, run <code>install_startup.bat</code>.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- New key modal -->
+<div class="modal fade" id="newKeyModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold">Create API Key</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label fw-semibold small">Key Name</label>
+          <input type="text" name="name" class="form-control" autofocus required
+                 placeholder="e.g. Home Desktop, Work Laptop">
+          <div class="form-text">A friendly label to identify which device or purpose this key is for.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" style="background:#6c63ff;border-color:#6c63ff">
+            <i class="bi bi-key me-1"></i>Generate Key
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyKey(key, btn) {
+  navigator.clipboard.writeText(key).then(() => {
+    const icon = btn.querySelector('i');
+    icon.className = 'bi bi-check-lg text-success';
+    setTimeout(() => { icon.className = 'bi bi-clipboard'; }, 2000);
+  });
+}
+</script>
+{% endblock %}
