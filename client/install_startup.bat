@@ -10,14 +10,7 @@ set SHORTCUT=%STARTUP%\ScreenTimeTracker.lnk
 echo Installing ScreenTime Tracker to startup...
 
 REM Use PowerShell to create a proper shortcut.
-powershell -NoProfile -Command ^
-  "$ws = New-Object -ComObject WScript.Shell; ^
-   $s  = $ws.CreateShortcut('%SHORTCUT%'); ^
-   $s.TargetPath    = 'wscript.exe'; ^
-   $s.Arguments     = '\"%SCRIPT_DIR%run_silent.vbs\"'; ^
-   $s.WorkingDirectory = '%SCRIPT_DIR%'; ^
-   $s.Description   = 'ScreenTime Tracker'; ^
-   $s.Save()"
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT%'); $s.TargetPath = 'wscript.exe'; $s.Arguments = '\"%SCRIPT_DIR%run_silent.vbs\"'; $s.WorkingDirectory = '%SCRIPT_DIR%'; $s.Description = 'ScreenTime Tracker'; $s.Save()"
 
 if exist "%SHORTCUT%" (
     echo Done!  The tracker will start automatically on next login.
