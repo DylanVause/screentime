@@ -133,6 +133,34 @@
   </div>
 </div>
 
+<!-- Screenshots -->
+{% if screenshots %}
+<div class="card mb-4">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-camera" style="color:#6c63ff"></i>
+    Screenshots <span class="badge bg-secondary ms-1">{{ screenshots|length }}</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-2">
+      {% for shot in screenshots %}
+      <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+        <a href="/screenshots/{{ shot['id'] }}" target="_blank" class="d-block">
+          <img src="/screenshots/{{ shot['id'] }}"
+               class="img-fluid rounded"
+               style="width:100%;height:90px;object-fit:cover"
+               loading="lazy"
+               title="{{ shot['taken_at'][:19].replace('T',' ') }} UTC">
+          <div class="text-muted text-center" style="font-size:.7rem;margin-top:2px">
+            {{ shot['taken_at'][11:16] }} UTC
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Session log -->
 <div class="card">
   <div class="card-header d-flex align-items-center gap-2">

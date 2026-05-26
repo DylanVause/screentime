@@ -35,6 +35,7 @@ from flask import (
     jsonify,
     flash,
     abort,
+    send_file,
 )
 
 app = Flask(__name__)
@@ -46,7 +47,11 @@ if not os.environ.get("SECRET_KEY"):
         "SECRET_KEY not set — using a random key.  Sessions will not survive restarts."
     )
 
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB max upload
+
 DB_PATH = Path(os.environ.get("DB_PATH", "screentime.db"))
+SCREENSHOT_DIR = Path(os.environ.get("SCREENSHOT_DIR", str(DB_PATH.parent / "screenshots")))
+SCREENSHOT_RETENTION_DAYS = int(os.environ.get("SCREENSHOT_RETENTION_DAYS", "30"))
 
 
 # ─── Database ────────────────────────────────────────────────────────────────
@@ -115,11 +120,49 @@ def init_db() -> None:
                 ON sessions(device_id, start_time);
             CREATE INDEX IF NOT EXISTS idx_sessions_app
                 ON sessions(app_name);
+
+            CREATE TABLE IF NOT EXISTS screenshots (
+                id        INTEGER PRIMARY KEY,
+                device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                taken_at  TEXT NOT NULL,
+                filename  TEXT NOT NULL,
+                filesize  INTEGER,
+                UNIQUE(device_id, taken_at)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_screenshots_device_taken
+                ON screenshots(device_id, taken_at);
             """
         )
 
 
 init_db()
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
+_last_cleanup: datetime | None = None
+
+
+def _cleanup_screenshots() -> None:
+    global _last_cleanup
+    now = datetime.utcnow()
+    if _last_cleanup and (now - _last_cleanup).total_seconds() < 86400:
+        return
+    _last_cleanup = now
+    cutoff = (now - timedelta(days=SCREENSHOT_RETENTION_DAYS)).isoformat()
+    with sqlite3.connect(str(DB_PATH)) as db:
+        rows = db.execute(
+            "SELECT filename FROM screenshots WHERE taken_at < ?", (cutoff,)
+        ).fetchall()
+        for row in rows:
+            p = SCREENSHOT_DIR / row[0]
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+        db.execute("DELETE FROM screenshots WHERE taken_at < ?", (cutoff,))
+
+
+_cleanup_screenshots()
 
 
 # ─── Template filters ────────────────────────────────────────────────────────
@@ -443,6 +486,18 @@ def device_detail(device_id):
         (device_id, date_from, date_to),
     ).fetchall()
 
+    screenshots = db.execute(
+        """
+        SELECT id, taken_at, filesize
+        FROM screenshots
+        WHERE device_id = ?
+          AND DATE(taken_at) BETWEEN ? AND ?
+        ORDER BY taken_at DESC
+        LIMIT 288
+        """,
+        (device_id, date_from, date_to),
+    ).fetchall()
+
     return render_template(
         "device_detail.html",
         device=device,
@@ -452,6 +507,7 @@ def device_detail(device_id):
         total_seconds=total_seconds,
         date_from=date_from,
         date_to=date_to,
+        screenshots=screenshots,
     )
 
 
@@ -604,6 +660,59 @@ def ping():
     _upsert_device(db, g.api_key_id, device_name)
     db.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/v1/screenshot", methods=["POST"])
+@api_key_required
+def upload_screenshot():
+    device_name = request.form.get("device_name", "unknown")[:128]
+    taken_at = (request.form.get("taken_at") or datetime.utcnow().isoformat())[:26]
+    f = request.files.get("screenshot")
+    if not f:
+        return jsonify({"error": "No screenshot file"}), 400
+
+    db = get_db()
+    device_id = _upsert_device(db, g.api_key_id, device_name)
+
+    date_str = taken_at[:10]
+    time_str = taken_at[11:19].replace(":", "-")
+    dir_path = SCREENSHOT_DIR / str(device_id) / date_str
+    dir_path.mkdir(parents=True, exist_ok=True)
+    rel = str(Path(str(device_id)) / date_str / f"{time_str}.jpg")
+    abs_path = SCREENSHOT_DIR / rel
+    f.save(str(abs_path))
+
+    db.execute(
+        """
+        INSERT OR IGNORE INTO screenshots (device_id, taken_at, filename, filesize)
+        VALUES (?, ?, ?, ?)
+        """,
+        (device_id, taken_at, rel, abs_path.stat().st_size),
+    )
+    db.commit()
+    _cleanup_screenshots()
+    return jsonify({"ok": True})
+
+
+@app.route("/screenshots/<int:screenshot_id>")
+@login_required
+def serve_screenshot(screenshot_id):
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT s.filename FROM screenshots s
+        JOIN devices d ON d.id = s.device_id
+        JOIN api_keys ak ON ak.id = d.api_key_id
+        WHERE s.id = ? AND ak.admin_id = ?
+        """,
+        (screenshot_id, session["admin_id"]),
+    ).fetchone()
+    if not row:
+        abort(404)
+    filepath = SCREENSHOT_DIR / row["filename"]
+    if not filepath.exists():
+        abort(404)
+    return send_file(str(filepath), mimetype="image/jpeg")
 
 
 # ─── Entry point ─────────────────────────────────────────────────────────────

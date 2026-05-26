@@ -6,6 +6,8 @@ services:
     environment:
       SECRET_KEY: ${SECRET_KEY}
       DB_PATH: /data/screentime.db
+      SCREENSHOT_DIR: /data/screenshots
+      SCREENSHOT_RETENTION_DAYS: ${SCREENSHOT_RETENTION_DAYS:-30}
     volumes:
       - screentime_data:/data
     restart: unless-stopped

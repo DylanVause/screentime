@@ -1,4 +1,4 @@
-"""HTTP uploader — sends buffered sessions to the ScreenTime server."""
+"""HTTP uploader — sends buffered sessions and screenshots to the ScreenTime server."""
 
 import logging
 from typing import Any
@@ -57,3 +57,25 @@ class Uploader:
         except Exception as exc:
             log.warning("Upload error: %s", exc)
             return False, 0
+
+    def upload_screenshot(self, image_bytes: bytes, taken_at: str) -> bool:
+        """Upload a JPEG screenshot.  Returns True on success."""
+        try:
+            resp = requests.post(
+                f"{self._base_url}/api/v1/screenshot",
+                headers={"X-API-Key": self._api_key},
+                data={"device_name": self._device_name, "taken_at": taken_at},
+                files={"screenshot": ("screenshot.jpg", image_bytes, "image/jpeg")},
+                timeout=self._timeout,
+                verify=self._verify_ssl,
+            )
+            if resp.status_code == 200:
+                return True
+            log.warning("Screenshot upload returned %d: %s", resp.status_code, resp.text[:200])
+            return False
+        except requests.exceptions.ConnectionError:
+            log.warning("Cannot reach server for screenshot upload")
+            return False
+        except Exception as exc:
+            log.warning("Screenshot upload error: %s", exc)
+            return False

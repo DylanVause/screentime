@@ -75,6 +75,7 @@ echo.
 echo [tracking]
 echo poll_interval = 1
 echo upload_interval = 900
+echo screenshot_interval = 300
 echo min_session_seconds = 2
 echo.
 echo [storage]

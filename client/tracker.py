@@ -5,6 +5,7 @@ Polls the active window every second, records sessions whenever focus changes,
 buffers them locally, and uploads to the server periodically.
 """
 
+import io
 import sys
 import time
 import logging
@@ -16,6 +17,7 @@ try:
     import win32gui
     import win32process
     import psutil
+    from PIL import ImageGrab, Image
 except ImportError:
     print("Missing dependencies. Run: pip install -r requirements.txt")
     sys.exit(1)
@@ -59,6 +61,21 @@ def get_active_window() -> tuple[str | None, str | None]:
         return None, None
 
 
+def capture_screenshot(quality: int = 70, max_width: int = 1280) -> bytes | None:
+    """Capture the screen and return compressed JPEG bytes."""
+    try:
+        img = ImageGrab.grab()
+        if img.width > max_width:
+            ratio = max_width / img.width
+            img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+    except Exception as exc:
+        log.warning("Screenshot capture failed: %s", exc)
+        return None
+
+
 def run() -> None:
     config = load_config()
     storage = LocalStorage(config)
@@ -67,11 +84,13 @@ def run() -> None:
     poll_interval: float = config["tracking"]["poll_interval"]
     upload_interval: float = config["tracking"]["upload_interval"]
     min_session_seconds: int = config["tracking"].get("min_session_seconds", 2)
+    screenshot_interval: float = config["tracking"].get("screenshot_interval", 0)
 
     current_app: str | None = None
     current_title: str | None = None
     session_start: datetime | None = None
     last_upload = time.monotonic()
+    last_screenshot = time.monotonic()
 
     device_name = config["device"]["name"]
     server_url = config["server"]["url"]
@@ -121,6 +140,18 @@ def run() -> None:
         if time.monotonic() - last_upload >= upload_interval:
             _do_upload(storage, uploader)
             last_upload = time.monotonic()
+
+        # Periodic screenshot.
+        if screenshot_interval > 0 and time.monotonic() - last_screenshot >= screenshot_interval:
+            taken_at = datetime.utcnow().isoformat()
+            image_bytes = capture_screenshot()
+            if image_bytes:
+                ok = uploader.upload_screenshot(image_bytes, taken_at)
+                if ok:
+                    log.info("Screenshot uploaded (%d KB).", len(image_bytes) // 1024)
+                else:
+                    log.warning("Screenshot upload failed — skipping.")
+            last_screenshot = time.monotonic()
 
         time.sleep(poll_interval)
 
